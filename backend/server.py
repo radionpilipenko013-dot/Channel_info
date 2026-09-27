@@ -1,12 +1,15 @@
+import os
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from backend.telegram_client import client
 from backend import analyzer, db
+
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "changeme")
 
 
 @asynccontextmanager
@@ -51,6 +54,11 @@ class TrackUserRequest(BaseModel):
     last_name: str | None = None
 
 
+def check_admin(x_admin_token: str = Header(None)):
+    if x_admin_token != ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
 @app.post("/api/analyze")
 async def api_analyze(req: AnalyzeRequest):
     try:
@@ -71,6 +79,12 @@ async def api_user_activity(req: UserActivityRequest):
 async def api_track_user(req: TrackUserRequest):
     db.track_user(req.id, req.username, req.first_name, req.last_name)
     return {"ok": True}
+
+
+@app.get("/api/admin/users")
+async def api_admin_users(x_admin_token: str = Header(None)):
+    check_admin(x_admin_token)
+    return db.list_users()
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
