@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -11,7 +12,13 @@ from backend import analyzer, db
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
-    await client.start()
+    print("Starting Telegram client...", flush=True)
+    try:
+        await asyncio.wait_for(client.start(), timeout=30)
+        print("Telegram client started", flush=True)
+    except asyncio.TimeoutError:
+        print("Telegram client.start() timed out after 30s", flush=True)
+        raise
     yield
     await client.disconnect()
 
