@@ -13,8 +13,27 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 
+async def track_user_call(user):
+    try:
+        async with aiohttp.ClientSession() as session:
+            await session.post(
+                f"{MINI_APP_URL}/api/track-user",
+                json={
+                    "id": user.id,
+                    "username": user.username,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                },
+                timeout=aiohttp.ClientTimeout(total=10),
+            )
+    except Exception as e:
+        print(f"track-user failed: {e}", flush=True)
+
+
 @dp.message(CommandStart())
 async def start(message: Message):
+    await track_user_call(message.from_user)
+
     url = f"{MINI_APP_URL}?v={int(time.time())}"
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Open Analyzer", web_app=WebAppInfo(url=url))]
