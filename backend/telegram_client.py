@@ -1,6 +1,9 @@
 import asyncio
 from telethon import TelegramClient
-from config import API_ID, API_HASH, SESSION_NAME
+from telethon.sessions import StringSession, SQLiteSession
+from config import API_ID, API_HASH, SESSION_NAME, SESSION_STRING
 
-client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
+session = StringSession(SESSION_STRING) if SESSION_STRING else SQLiteSession(SESSION_NAME)
+
+client = TelegramClient(session, API_ID, API_HASH)
 lock = asyncio.Lock()
