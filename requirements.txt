@@ -1,0 +1,6 @@
+telethon
+fastapi
+uvicorn[standard]
+aiogram
+pydantic
+python-dotenv

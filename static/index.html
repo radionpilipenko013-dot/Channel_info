@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Channel Scan</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0B0F14;
+    --panel: #121821;
+    --border: #1F2A36;
+    --border-strong: #324459;
+    --text: #E6EDF3;
+    --text-dim: #7C8A99;
+    --accent: #2DD4BF;
+    --accent-dim: #123B36;
+    --danger: #F87171;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 18px 16px 32px;
+    line-height: 1.45;
+  }
+
+  .hero { position: relative; overflow: hidden; padding-bottom: 4px; }
+
+  .sweep {
+    position: absolute;
+    left: 0; right: 0; top: -2px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    box-shadow: 0 0 14px 1px var(--accent);
+    opacity: 0.9;
+    animation: sweep-down 1.1s cubic-bezier(.2,.7,.3,1) forwards;
+  }
+  @keyframes sweep-down {
+    from { transform: translateY(0); opacity: 0.9; }
+    to   { transform: translateY(230px); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) { .sweep { display: none; } }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-dim);
+    letter-spacing: 0.01em;
+  }
+
+  .scan-frame { position: relative; }
+  .scan-frame::before,
+  .scan-frame::after {
+    content: "";
+    position: absolute;
+    width: 8px; height: 8px;
+    border-color: var(--border-strong);
+    border-style: solid;
+    pointer-events: none;
+  }
+  .scan-frame::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
+  .scan-frame::after  { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+
+  .search-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--panel);
+    padding: 11px 14px;
+    border: 1px solid var(--border);
+  }
+  .search-bar:focus-within { border-color: var(--accent); }
+  .search-bar svg { opacity: 0.5; flex-shrink: 0; color: var(--text-dim); }
+
+  #searchInput {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: inherit;
+    font-family: var(--sans);
+    font-size: 15px;
+    padding: 3px 0;
+  }
+  #searchInput::placeholder { color: #4A5A6B; }
+
+  .advanced { display: flex; gap: 8px; margin-top: 8px; }
+  #limitInput {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 9px 12px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 13px;
+    outline: none;
+  }
+  #limitInput:focus { border-color: var(--accent); color: var(--text); }
+
+  .history { display: none; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
+  .history-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.7;
+    margin-right: 2px;
+  }
+  .history-chip {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    padding: 5px 9px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  .history-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  button.primary {
+    margin-top: 12px;
+    width: 100%;
+    padding: 13px;
+    border: none;
+    background: var(--accent);
+    color: #06201B;
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(45,212,191,0.25);
+    transition: transform 0.12s ease, opacity 0.12s ease;
+  }
+  button.primary:active { transform: scale(0.98); }
+  button.primary:disabled { opacity: 0.45; box-shadow: none; }
+  button.primary:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+  button.secondary {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border-strong);
+    background: var(--panel);
+    color: var(--text);
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  button.secondary:hover { background: var(--accent-dim); border-color: var(--accent); }
+  button.secondary:disabled { opacity: 0.45; cursor: default; }
+
+  #status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--text-dim);
+    min-height: 18px;
+  }
+
+  .spinner {
+    width: 13px; height: 13px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .section {
+    margin-top: 16px;
+    padding: 14px 14px 6px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+  }
+
+  .section h3 {
+    margin: 0 0 8px 0;
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .copy-all { font-family: var(--sans); font-size: 12px; color: var(--accent); cursor: pointer; opacity: 0.9; }
+  .copy-all:hover { opacity: 1; }
+
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 0;
+    font-size: 13.5px;
+    border-bottom: 1px solid var(--border);
+  }
+  .row:last-child { border-bottom: none; }
+  .row span:first-child { color: var(--text-dim); flex-shrink: 0; }
+  .row span:last-child { text-align: right; word-break: break-word; font-weight: 500; }
+
+  .username-text {
+    color: var(--accent);
+    font-family: var(--mono);
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+  .username-text:hover { opacity: 0.7; }
+
+  .badge {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    padding: 2px 6px;
+    border: 1px solid var(--border-strong);
+    margin-left: 6px;
+    color: var(--text-dim);
+  }
+  .badge.premium { color: #67E8C9; border-color: #14524A; background: #0C2622; }
+  .badge.verified { color: #7EC1F2; border-color: #1E4258; background: #0F212D; }
+  .badge.danger { color: #FCA5A5; border-color: #5A231D; background: #2E140F; }
+
+  .link-item {
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--accent);
+    cursor: pointer;
+    word-break: break-all;
+    transition: opacity 0.15s ease;
+  }
+  .link-item:hover { opacity: 0.75; }
+  .link-item:last-child { border-bottom: none; }
+
+  .activity-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 9px 12px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    outline: none;
+    margin-bottom: 8px;
+  }
+  .activity-input:focus { border-color: var(--accent); }
+
+  .msg-item { padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .msg-item:last-child { border-bottom: none; }
+  .msg-date { font-family: var(--mono); font-size: 11px; color: var(--text-dim); display: block; margin-bottom: 2px; }
+
+  .action-row { display: none; gap: 8px; margin-top: 16px; }
+  .action-btn {
+    flex: 1;
+    padding: 11px 6px;
+    border: 1px solid var(--border-strong);
+    background: var(--panel);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .action-btn:hover { background: var(--accent-dim); color: var(--text); border-color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="sweep"></div>
+  <div class="topbar">Channel Scan</div>
+
+  <div class="search-bar scan-frame">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="11" cy="11" r="7"></circle>
+      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+    </svg>
+    <input id="searchInput" placeholder="Channel or @username" autocomplete="off">
+  </div>
+
+  <div class="advanced">
+    <input id="limitInput" placeholder="Message limit (empty = all)" type="number">
+  </div>
+
+  <div class="history" id="historyRow"></div>
+
+  <button class="primary" id="searchBtn" onclick="runAnalyze()">Search</button>
+</div>
+
+<div id="status"></div>
+<div id="results"></div>
+
+<div class="action-row" id="actionRow">
+  <button class="action-btn" onclick="copyAllData()">Copy all</button>
+  <button class="action-btn" onclick="exportData()">JSON</button>
+</div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) tg.expand();
+
+async function trackUser() {
+  const u = tg?.initDataUnsafe?.user;
+  if (!u) return;
+  try {
+    await fetch("/api/track-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: u.id,
+        username: u.username || null,
+        first_name: u.first_name || null,
+        last_name: u.last_name || null
+      })
+    });
+  } catch (e) {}
+}
+trackUser();
+
+const HISTORY_KEY = "scan_history";
+let lastData = null;
+let lastUserQuery = null;
+let lastActivityData = null;
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str ?? "";
+  return div.innerHTML;
+}
+
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function addToHistory(query) {
+  let history = loadHistory().filter(q => q.toLowerCase() !== query.toLowerCase());
+  history.unshift(query);
+  history = history.slice(0, 3);
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (e) {}
+  renderHistory();
+}
+
+function renderHistory() {
+  const container = document.getElementById("historyRow");
+  const history = loadHistory();
+  if (!history.length) {
+    container.innerHTML = "";
+    container.style.display = "none";
+    return;
+  }
+  container.style.display = "flex";
+  container.innerHTML = `<span class="history-label">recent</span>` +
+    history.map(q =>
+      `<span class="history-chip" onclick="runFromHistory('${escapeHtml(q).replace(/'/g, "\\'")}')">${escapeHtml(q)}</span>`
+    ).join("");
+}
+
+function runFromHistory(query) {
+  document.getElementById("searchInput").value = query;
+  runAnalyze();
+}
+
+function userLink(username, fallback) {
+  if (!username) return escapeHtml(fallback ?? "-");
+  return `<span class="username-text" onclick="copyUsername('${username}', this)">@${escapeHtml(username)}</span>`;
+}
+
+function copyUsername(username, el) {
+  navigator.clipboard.writeText("@" + username).then(() => {
+    const original = el.textContent;
+    el.textContent = "copied";
+    setTimeout(() => { el.textContent = original; }, 900);
+  });
+}
+
+function openProfile(username) {
+  const url = `https://t.me/${username}`;
+  if (tg && tg.openTelegramLink) {
+    tg.openTelegramLink(url);
+  } else {
+    window.open(url, "_blank");
+  }
+}
+
+function openExternalLink(url) {
+  if (tg && tg.openLink) {
+    tg.openLink(url);
+  } else {
+    window.open(url, "_blank");
+  }
+}
+
+async function runAnalyze() {
+  const query = document.getElementById("searchInput").value.trim();
+  const limitRaw = document.getElementById("limitInput").value.trim();
+  const status = document.getElementById("status");
+  const results = document.getElementById("results");
+  const btn = document.getElementById("searchBtn");
+  const actionRow = document.getElementById("actionRow");
+
+  results.innerHTML = "";
+  actionRow.style.display = "none";
+  lastActivityData = null;
+
+  if (!query) {
+    status.textContent = "Enter a channel or username";
+    return;
+  }
+
+  btn.disabled = true;
+  status.innerHTML = `<div class="spinner"></div><span>Analyzing...</span>`;
+
+  try {
+    const res = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, limit: limitRaw ? parseInt(limitRaw) : null })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      status.textContent = "Error: " + err.detail;
+      btn.disabled = false;
+      return;
+    }
+
+    const data = await res.json();
+    lastData = data;
+    lastUserQuery = query;
+    status.textContent = "";
+    btn.disabled = false;
+
+    if (data.type === "user") {
+      renderUser(data);
+    } else {
+      renderChannel(data);
+    }
+
+    addToHistory(query);
+    actionRow.style.display = "flex";
+  } catch (e) {
+    status.textContent = "Error: " + e.message;
+    btn.disabled = false;
+  }
+}
+
+function renderChannel(data) {
+  const results = document.getElementById("results");
+
+  results.innerHTML += section("Channel", [
+    row("Title", escapeHtml(data.title)),
+    row("ID", data.channel_id),
+    row("Subscribers", data.participants_count),
+    row("First message", data.first_message_date ?? "-"),
+    row("Last message", data.last_message_date ?? "-"),
+    row("Comments", data.comments_available ? "enabled" : "disabled"),
+  ]);
+
+  results.innerHTML += section("Reactions", [
+    row("Total", data.total_reactions),
+    ...Object.entries(data.reactions_breakdown).map(([e, c]) => row(escapeHtml(e), c))
+  ]);
+
+  results.innerHTML += section(`Subscribers-Commenters (${data.users_count})`,
+    data.users.map(u => row(userLink(u.username), u.id)),
+    data.users.filter(u => u.username).map(u => u.username)
+  );
+
+  results.innerHTML += linkSection("Links in comments", data.links_in_comments);
+  results.innerHTML += linkSection("Links in posts", data.links_in_channel);
+}
+
+function renderUser(data) {
+  const results = document.getElementById("results");
+
+  const nameParts = [data.first_name, data.last_name].filter(Boolean).map(escapeHtml).join(" ");
+  let badges = "";
+  if (data.premium) badges += `<span class="badge premium">premium</span>`;
+  if (data.verified) badges += `<span class="badge verified">verified</span>`;
+  if (data.is_bot) badges += `<span class="badge">bot</span>`;
+  if (data.scam) badges += `<span class="badge danger">scam</span>`;
+  if (data.fake) badges += `<span class="badge danger">fake</span>`;
+  if (data.deleted) badges += `<span class="badge danger">deleted</span>`;
+
+  results.innerHTML += section("Profile", [
+    row("Name", (nameParts || "-") + badges),
+    row("Username", userLink(data.username)),
+    row("ID", data.id),
+    row("Phone", data.phone ? escapeHtml(data.phone) : "hidden"),
+    row("Last seen", escapeHtml(data.last_seen)),
+    row("Profile photo", data.has_photo ? `yes (${data.photo_count})` : "no"),
+  ]);
+
+  results.innerHTML += section("Connections", [
+    row("In contacts", data.in_contacts ? "yes" : "no"),
+    row("Mutual contact", data.mutual_contact ? "yes" : "no"),
+    row("Blocked by you", data.blocked ? "yes" : "no"),
+  ]);
+
+  if (data.bio) {
+    results.innerHTML += section("Bio", [row("Text", escapeHtml(data.bio))]);
+  }
+
+  if (data.photo_history && data.photo_history.length) {
+    results.innerHTML += section(`Photo history (${data.photo_history.length})`,
+      data.photo_history.map(p => row(p.id, escapeHtml(p.date)))
+    );
+  }
+
+  results.innerHTML += section(`Common groups/channels (${data.common_chats_count})`,
+    data.common_chats.length
+      ? data.common_chats.map(c => row(userLink(c.username, c.title), c.id))
+      : [row("—", "none found")],
+    data.common_chats.filter(c => c.username).map(c => c.username)
+  );
+
+  results.innerHTML += activitySection();
+}
+
+function activitySection() {
+  return `<div class="section" id="activitySection">
+    <h3>Chat activity</h3>
+    <input class="activity-input" id="activityChatInput" placeholder="Chat/channel (@username or ID)">
+    <button class="secondary" id="activityBtn" onclick="runActivity()">Check activity</button>
+    <div id="activityStatus" style="margin-top:8px;"></div>
+    <div id="activityResults"></div>
+  </div>`;
+}
+
+async function runActivity() {
+  const chat = document.getElementById("activityChatInput").value.trim();
+  const status = document.getElementById("activityStatus");
+  const results = document.getElementById("activityResults");
+  const btn = document.getElementById("activityBtn");
+
+  results.innerHTML = "";
+
+  if (!chat) {
+    status.textContent = "Enter a chat or channel";
+    return;
+  }
+  if (!lastUserQuery) return;
+
+  btn.disabled = true;
+  status.innerHTML = `<div class="spinner"></div><span>Scanning chat...</span>`;
+
+  try {
+    const res = await fetch("/api/user-activity", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user: lastUserQuery, chat, limit: 500 })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      status.textContent = "Error: " + err.detail;
+      btn.disabled = false;
+      return;
+    }
+
+    const data = await res.json();
+    lastActivityData = data;
+    status.textContent = "";
+    btn.disabled = false;
+
+    results.innerHTML = `
+      <div class="row"><span>Chat</span><span>${escapeHtml(data.chat_title ?? "-")}</span></div>
+      <div class="row"><span>Messages</span><span>${data.messages_count}</span></div>
+      <div class="row"><span>Reactions placed</span><span>${data.reactions_placed}</span></div>
+    ` + data.messages.map(m => `
+      <div class="msg-item">
+        <span class="msg-date">${escapeHtml(m.date)}</span>
+        ${escapeHtml(m.text || "(no text)")}
+      </div>
+    `).join("");
+  } catch (e) {
+    status.textContent = "Error: " + e.message;
+    btn.disabled = false;
+  }
+}
+
+function section(title, rowsHtml, copyAllList) {
+  const copyBtn = copyAllList && copyAllList.length
+    ? `<span class="copy-all" onclick="copyAll(this, ${JSON.stringify(copyAllList).replace(/"/g, '&quot;')})">copy all</span>`
+    : "";
+  return `<div class="section"><h3>${title}${copyBtn}</h3>${rowsHtml.join("")}</div>`;
+}
+
+function copyAll(el, usernames) {
+  const text = usernames.map(u => "@" + u).join("\n");
+  navigator.clipboard.writeText(text).then(() => {
+    const original = el.textContent;
+    el.textContent = "copied";
+    setTimeout(() => { el.textContent = original; }, 900);
+  });
+}
+
+function row(label, value) {
+  return `<div class="row"><span>${label}</span><span>${value}</span></div>`;
+}
+
+function linkSection(title, links) {
+  if (!links.length) return "";
+  const items = links.map(l =>
+    `<div class="link-item" onclick="openExternalLink('${escapeHtml(l)}')">${escapeHtml(l)}</div>`
+  ).join("");
+  return `<div class="section"><h3>${title} (${links.length})</h3>${items}</div>`;
+}
+
+function userFlagsList(data) {
+  const flags = [];
+  if (data.premium) flags.push("premium");
+  if (data.verified) flags.push("verified");
+  if (data.is_bot) flags.push("bot");
+  if (data.scam) flags.push("scam");
+  if (data.fake) flags.push("fake");
+  if (data.deleted) flags.push("deleted");
+  return flags;
+}
+
+function buildSummaryText() {
+  if (!lastData) return "";
+  const L = [];
+
+  if (lastData.type === "channel") {
+    L.push("📡 CHANNEL");
+    L.push(`Title: ${lastData.title}`);
+    L.push(`ID: ${lastData.channel_id}`);
+    L.push(`Subscribers: ${lastData.participants_count}`);
+    L.push(`First message: ${lastData.first_message_date ?? "-"}`);
+    L.push(`Last message: ${lastData.last_message_date ?? "-"}`);
+    L.push(`Comments: ${lastData.comments_available ? "enabled" : "disabled"}`);
+    L.push("");
+    L.push(`❤️ REACTIONS (total ${lastData.total_reactions})`);
+    Object.entries(lastData.reactions_breakdown).forEach(([e, c]) => L.push(`${e} — ${c}`));
+    L.push("");
+    L.push(`💬 COMMENTERS (${lastData.users_count})`);
+    lastData.users.forEach(u => L.push(u.username ? `@${u.username} (${u.id})` : `${u.id}`));
+    if (lastData.links_in_comments.length) {
+      L.push("");
+      L.push(`🔗 LINKS IN COMMENTS (${lastData.links_in_comments.length})`);
+      lastData.links_in_comments.forEach(l => L.push(l));
+    }
+    if (lastData.links_in_channel.length) {
+      L.push("");
+      L.push(`🔗 LINKS IN POSTS (${lastData.links_in_channel.length})`);
+      lastData.links_in_channel.forEach(l => L.push(l));
+    }
+  } else {
+    const flags = userFlagsList(lastData);
+    L.push("👤 PROFILE");
+    L.push(`Name: ${[lastData.first_name, lastData.last_name].filter(Boolean).join(" ") || "-"}`);
+    L.push(`Username: ${lastData.username ? "@" + lastData.username : "-"}`);
+    L.push(`ID: ${lastData.id}`);
+    L.push(`Phone: ${lastData.phone || "hidden"}`);
+    L.push(`Last seen: ${lastData.last_seen}`);
+    L.push(`Profile photo: ${lastData.has_photo ? "yes (" + lastData.photo_count + ")" : "no"}`);
+    if (flags.length) L.push(`Flags: ${flags.join(", ")}`);
+    L.push("");
+    L.push("🔗 CONNECTIONS");
+    L.push(`In contacts: ${lastData.in_contacts ? "yes" : "no"}`);
+    L.push(`Mutual contact: ${lastData.mutual_contact ? "yes" : "no"}`);
+    L.push(`Blocked by you: ${lastData.blocked ? "yes" : "no"}`);
+    if (lastData.bio) {
+      L.push("");
+      L.push("📝 BIO");
+      L.push(lastData.bio);
+    }
+    if (lastData.photo_history && lastData.photo_history.length) {
+      L.push("");
+      L.push(`🖼 PHOTO HISTORY (${lastData.photo_history.length})`);
+      lastData.photo_history.forEach(p => L.push(`${p.date} — id ${p.id}`));
+    }
+    if (lastData.common_chats.length) {
+      L.push("");
+      L.push(`👥 COMMON GROUPS/CHANNELS (${lastData.common_chats_count})`);
+      lastData.common_chats.forEach(c => L.push(`${c.username ? "@" + c.username : c.title} (${c.id})`));
+    }
+    if (lastActivityData) {
+      L.push("");
+      L.push("📊 CHAT ACTIVITY");
+      L.push(`Chat: ${lastActivityData.chat_title ?? "-"}`);
+      L.push(`Messages: ${lastActivityData.messages_count}`);
+      L.push(`Reactions placed: ${lastActivityData.reactions_placed}`);
+      lastActivityData.messages.forEach(m => L.push(`[${m.date}] ${m.text || "(no text)"}`));
+    }
+  }
+
+  return L.join("\n");
+}
+
+function buildSummaryHtml() {
+  if (!lastData) return "";
+  const H = [];
+
+  if (lastData.type === "channel") {
+    H.push(`<b>📡 CHANNEL</b><br>`);
+    H.push(`Title: ${escapeHtml(lastData.title)}<br>`);
+    H.push(`ID: ${lastData.channel_id}<br>`);
+    H.push(`Subscribers: ${lastData.participants_count}<br>`);
+    H.push(`First message: ${lastData.first_message_date ?? "-"}<br>`);
+    H.push(`Last message: ${lastData.last_message_date ?? "-"}<br>`);
+    H.push(`Comments: ${lastData.comments_available ? "enabled" : "disabled"}<br><br>`);
+    H.push(`<b>❤️ REACTIONS (total ${lastData.total_reactions})</b><br>`);
+    Object.entries(lastData.reactions_breakdown).forEach(([e, c]) => H.push(`${escapeHtml(e)} — ${c}<br>`));
+    H.push(`<br><b>💬 COMMENTERS (${lastData.users_count})</b><br>`);
+    lastData.users.forEach(u => H.push(u.username ? `@${escapeHtml(u.username)} (${u.id})<br>` : `${u.id}<br>`));
+    if (lastData.links_in_comments.length) {
+      H.push(`<br><b>🔗 LINKS IN COMMENTS (${lastData.links_in_comments.length})</b><br>`);
+      lastData.links_in_comments.forEach(l => H.push(`${escapeHtml(l)}<br>`));
+    }
+    if (lastData.links_in_channel.length) {
+      H.push(`<br><b>🔗 LINKS IN POSTS (${lastData.links_in_channel.length})</b><br>`);
+      lastData.links_in_channel.forEach(l => H.push(`${escapeHtml(l)}<br>`));
+    }
+  } else {
+    const flags = userFlagsList(lastData);
+    H.push(`<b>👤 PROFILE</b><br>`);
+    H.push(`Name: ${escapeHtml([lastData.first_name, lastData.last_name].filter(Boolean).join(" ")) || "-"}<br>`);
+    H.push(`Username: ${lastData.username ? "@" + escapeHtml(lastData.username) : "-"}<br>`);
+    H.push(`ID: ${lastData.id}<br>`);
+    H.push(`Phone: ${lastData.phone ? escapeHtml(lastData.phone) : "hidden"}<br>`);
+    H.push(`Last seen: ${escapeHtml(lastData.last_seen)}<br>`);
+    H.push(`Profile photo: ${lastData.has_photo ? "yes (" + lastData.photo_count + ")" : "no"}<br>`);
+    if (flags.length) H.push(`Flags: ${flags.join(", ")}<br>`);
+    H.push(`<br><b>🔗 CONNECTIONS</b><br>`);
+    H.push(`In contacts: ${lastData.in_contacts ? "yes" : "no"}<br>`);
+    H.push(`Mutual contact: ${lastData.mutual_contact ? "yes" : "no"}<br>`);
+    H.push(`Blocked by you: ${lastData.blocked ? "yes" : "no"}<br>`);
+    if (lastData.bio) {
+      H.push(`<br><b>📝 BIO</b><br>${escapeHtml(lastData.bio)}<br>`);
+    }
+    if (lastData.photo_history && lastData.photo_history.length) {
+      H.push(`<br><b>🖼 PHOTO HISTORY (${lastData.photo_history.length})</b><br>`);
+      lastData.photo_history.forEach(p => H.push(`${escapeHtml(p.date)} — id ${p.id}<br>`));
+    }
+    if (lastData.common_chats.length) {
+      H.push(`<br><b>👥 COMMON GROUPS/CHANNELS (${lastData.common_chats_count})</b><br>`);
+      lastData.common_chats.forEach(c => H.push(`${c.username ? "@" + escapeHtml(c.username) : escapeHtml(c.title)} (${c.id})<br>`));
+    }
+    if (lastActivityData) {
+      H.push(`<br><b>📊 CHAT ACTIVITY</b><br>`);
+      H.push(`Chat: ${escapeHtml(lastActivityData.chat_title ?? "-")}<br>`);
+      H.push(`Messages: ${lastActivityData.messages_count}<br>`);
+      H.push(`Reactions placed: ${lastActivityData.reactions_placed}<br>`);
+      lastActivityData.messages.forEach(m => H.push(`[${escapeHtml(m.date)}] ${escapeHtml(m.text || "(no text)")}<br>`));
+    }
+  }
+
+  return H.join("");
+}
+
+async function copyAllData() {
+  const text = buildSummaryText();
+  if (!text) return;
+  const html = buildSummaryHtml();
+  const status = document.getElementById("status");
+  const original = status.textContent;
+
+  try {
+    if (window.ClipboardItem) {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/plain": new Blob([text], { type: "text/plain" }),
+          "text/html": new Blob([html], { type: "text/html" }),
+        })
+      ]);
+    } else {
+      await navigator.clipboard.writeText(text);
+    }
+  } catch (e) {
+    await navigator.clipboard.writeText(text);
+  }
+
+  status.textContent = "Copied (with formatting)";
+  setTimeout(() => { status.textContent = original; }, 1400);
+}
+
+function exportData() {
+  if (!lastData) return;
+  const blob = new Blob([JSON.stringify(lastData, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const name = lastData.username || lastData.channel_id || lastData.id || "export";
+  a.href = url;
+  a.download = `analysis_${name}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+renderHistory();
+</script>
+</body>
+</html>
