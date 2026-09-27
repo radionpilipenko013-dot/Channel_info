@@ -1,11 +1,11 @@
 import asyncio
 import time
+import aiohttp
 from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
-from config import BOT_TOKEN, MINI_APP_URL
-from backend import db
+from config import BOT_TOKEN, MINI_APP_URL, ADMIN_TOKEN
 
 ADMIN_IDS = {5253335910}
 
@@ -27,7 +27,20 @@ async def cmd_admin(message: Message):
     if message.from_user.id not in ADMIN_IDS:
         return
 
-    users = db.list_users()
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{MINI_APP_URL}/api/admin/users",
+                headers={"x-admin-token": ADMIN_TOKEN},
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status != 200:
+                    await message.answer(f"Ошибка API: {resp.status}")
+                    return
+                users = await resp.json()
+    except Exception as e:
+        await message.answer(f"Не удалось получить список: {e}")
+        return
 
     if not users:
         await message.answer("Пользователей пока нет.")
@@ -51,7 +64,6 @@ async def cmd_admin(message: Message):
 
 
 async def main():
-    db.init_db()
     await dp.start_polling(bot)
 
 
