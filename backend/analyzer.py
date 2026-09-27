@@ -1,4 +1,5 @@
 import re
+import logging
 from telethon.tl.functions.channels import GetFullChannelRequest
 from telethon.tl.functions.users import GetFullUserRequest
 from telethon.tl.functions.messages import GetCommonChatsRequest
@@ -14,15 +15,24 @@ from backend.telegram_client import client, lock
 
 URL_RE = re.compile(r'https?://\S+')
 MAX_PARTICIPANTS = 5000
+DEFAULT_MESSAGE_LIMIT = 1000  # используется, если limit не указан
+
+logger = logging.getLogger("analyzer")
 
 
 async def safe_iter_messages(entity, limit=None):
     while True:
         try:
+            count = 0
             async for msg in client.iter_messages(entity, limit=limit):
+                count += 1
+                if count % 200 == 0:
+                    logger.info(f"safe_iter_messages: обработано {count} сообщений (entity={entity})")
                 yield msg
+            logger.info(f"safe_iter_messages: завершено, всего {count} сообщений (entity={entity})")
             return
         except FloodWaitError as e:
+            logger.warning(f"FloodWaitError: ожидание {e.seconds} секунд (entity={entity})")
             await asyncio.sleep(e.seconds)
 
 
@@ -79,6 +89,12 @@ async def resolve_entity(query):
 
 
 async def analyze_channel(entity, limit):
+    if limit is None:
+        limit = DEFAULT_MESSAGE_LIMIT
+        logger.info(f"analyze_channel: limit не указан, использую дефолт {DEFAULT_MESSAGE_LIMIT}")
+
+    logger.info(f"analyze_channel: старт для {getattr(entity, 'title', entity)}, limit={limit}")
+
     full = await client(GetFullChannelRequest(entity))
     linked_chat_id = full.full_chat.linked_chat_id
     participants_count = full.full_chat.participants_count
@@ -98,6 +114,7 @@ async def analyze_channel(entity, limit):
     first_msg = await get_first_message(entity)
     last_msg = await get_last_message(entity)
 
+    logger.info("analyze_channel: сканирую сообщения канала")
     async for msg in safe_iter_messages(entity, limit):
         if msg.text:
             links_in_channel += URL_RE.findall(msg.text)
@@ -108,6 +125,7 @@ async def analyze_channel(entity, limit):
                 reactions_breakdown[label] = reactions_breakdown.get(label, 0) + r.count
 
     if linked_chat_id:
+        logger.info("analyze_channel: сканирую привязанный чат комментариев")
         async for msg in safe_iter_messages(linked_chat_id, limit):
             if msg.sender_id:
                 username = None
@@ -116,6 +134,8 @@ async def analyze_channel(entity, limit):
                 users[msg.sender_id] = username
             if msg.text:
                 links_in_comments += URL_RE.findall(msg.text)
+
+    logger.info("analyze_channel: завершено")
 
     return {
         "type": "channel",
@@ -179,6 +199,9 @@ async def analyze_user(entity):
 
 
 async def get_user_activity(user_entity, chat_entity, limit=500):
+    if limit is None:
+        limit = DEFAULT_MESSAGE_LIMIT
+
     messages = []
     reactions_placed = 0
 
