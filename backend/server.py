@@ -89,4 +89,4 @@ async def api_admin_users(x_admin_token: str = Header(None)):
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
-# update and fix admin
+# update and fix admin panel
